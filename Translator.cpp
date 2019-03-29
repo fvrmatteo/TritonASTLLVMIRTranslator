@@ -911,7 +911,7 @@ SharedAbstractNode Translator::LLVMIRToTritonAst(const shared_ptr<Module> module
 	// Get our lovely basic block out of the function
 	BasicBlock& TritonAstBlock = TritonAstFunction->getEntryBlock();
 	// Get the return value of the function
-	TerminatorInst* retval = TritonAstBlock.getTerminator();
+	Instruction* retval = TritonAstBlock.getTerminator();
 	// Explore the function in a bottom-up fashion
 	map<Value *, SharedAbstractNode> values;
 	auto ast = LiftInstructionsDFS(retval, values);
