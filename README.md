@@ -4,6 +4,7 @@ This code has been developed as a quick test in a weekend to evaluate how feasib
 
 # Sample output
 
+```
 Original Triton AST
 (bvadd (bvsub SymVar_0 SymVar_1) (bvadd SymVar_0 SymVar_1))
 
@@ -25,6 +26,7 @@ attributes #0 = { alwaysinline }
 
 Optimized Triton AST
 (bvshl SymVar_0 (_ bv1 64))
+```
 
 # Inspiration
 
