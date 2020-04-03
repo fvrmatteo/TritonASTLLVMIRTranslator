@@ -50,9 +50,12 @@ typedef struct AstNode {
   shared_ptr<AstNode> Parent;
   SharedAbstractNode Node;
   uint64_t Index;
+  // Depth of the AST
+  size_t Depth;
   // Default constructor
   AstNode(SharedAbstractNode Node, shared_ptr<AstNode> Parent) :
-    Node(Node), Parent(Parent), Expression(nullptr), Index(0) {}
+    Node(Node), Parent(Parent), Expression(nullptr), Index(0),
+    Depth(0) {}
   // Print the node
   void dump() {
     // Convert the expression to a string
@@ -65,6 +68,7 @@ typedef struct AstNode {
     string ExpressionString = ss.str();
     // Dump the node
     cout << "{ Index = " << dec << this->Index
+         << ", Depth = " << dec << this->Depth
          << ", Node = " << this->Node
          << ", Expression = " << ExpressionString
          << ", Children = " << dec << this->Node->getChildren().size()
@@ -99,7 +103,7 @@ private:
   ConstantInt* GetDecimal(IntegerNode& Value, uint64_t BitVectorSize);
 
   // Lift the nodes in an AST in a worklist-based way
-  Value* LiftNodesWBS(const SharedAbstractNode& TopNode, shared_ptr<IRBuilder<>> IR, map<ExpKey, shared_ptr<llvm::Module>>& Cache);
+  Value* LiftNodesWBS(const SharedAbstractNode& TopNode, shared_ptr<IRBuilder<>> IR, map<ExpKey, shared_ptr<llvm::Module>>& Cache, ssize_t MaxDepth);
 
   // Lift the instructions in a block in a DFS way
   SharedAbstractNode LiftInstructionsDFS(Value* value, map<Value*, SharedAbstractNode>& Values, map<string, SharedAbstractNode>& Variables);
@@ -133,7 +137,7 @@ public:
   ~Translator() {};
 
   // Lift a Triton AST to a LLVM-IR block
-  shared_ptr<llvm::Module> TritonAstToLLVMIR(const SharedAbstractNode& Node, map<ExpKey, shared_ptr<llvm::Module>>& Cache);
+  shared_ptr<llvm::Module> TritonAstToLLVMIR(const SharedAbstractNode& Node, map<ExpKey, shared_ptr<llvm::Module>>& Cache, ssize_t MaxDepth = -1);
 
   // Lift a LLVM-IR block to a Triton AST
   SharedAbstractNode LLVMIRToTritonAst(const shared_ptr<llvm::Module>& Module, map<string, SharedAbstractNode>& Variables, bool IsITE = false, bool IsLogical = false);

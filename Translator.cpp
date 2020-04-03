@@ -108,11 +108,13 @@ ConstantInt* Translator::GetDecimal(IntegerNode& Node, uint64_t BitVectorSize) {
   Worklist-based translation of a Triton AST to an LLVM-IR Module.
 */
 
-Value* Translator::LiftNodesWBS(const SharedAbstractNode& TopNode, shared_ptr<IRBuilder<>> IR, map<ExpKey, shared_ptr<llvm::Module>>& Cache) {
+Value* Translator::LiftNodesWBS(const SharedAbstractNode& TopNode, shared_ptr<IRBuilder<>> IR, map<ExpKey, shared_ptr<llvm::Module>>& Cache, ssize_t MaxDepth) {
   // Use a dictionary for the known references
   map<triton::usize, triton::engines::symbolic::SharedSymbolicExpression> References;
   // Use a dictionary for the known AST nodes
   map<SharedAbstractNode, Value*> Nodes;
+  // Counter for the fake global variable
+  size_t FakeIndex = 0;
   // At this point we can translate the AST
   auto Curr = make_shared<AstNode>(TopNode, nullptr);
   while (Curr) {
@@ -129,6 +131,20 @@ Value* Translator::LiftNodesWBS(const SharedAbstractNode& TopNode, shared_ptr<IR
       // Get the parent
       Curr = Curr->Parent;
       // Restart the loop
+      continue;
+    }
+    // Check if we reached the maximum depth
+    if (Curr->Depth == MaxDepth) {
+      // Create a fake variable
+      stringstream ss;
+      ss << "FakeVar_";
+      ss << dec << Curr->Node->getBitvectorSize();
+      ss << "_";
+      ss << dec << FakeIndex++;
+      auto FakeVarName = ss.str();
+      auto FakeVar = new GlobalVariable(*this->Module, IntegerType::get(this->Context, Curr->Node->getBitvectorSize()), false, GlobalValue::CommonLinkage, nullptr, FakeVarName);
+      auto FakeLoad = IR->CreateLoad(FakeVar);
+      Nodes[Curr->Node] = FakeLoad;
       continue;
     }
     // Craft a constant if possible and continue with the parent
@@ -155,8 +171,12 @@ Value* Translator::LiftNodesWBS(const SharedAbstractNode& TopNode, shared_ptr<IR
     auto Children = Curr->Node->getChildren();
     // Handle the current node
     if (Curr->Index < Children.size()) {
+      // Determine the child depth
+      size_t ChildDepth = Curr->Depth + 1;
       // Create the child node
       Curr = make_shared<AstNode>(Children[Curr->Index++], Curr);
+      // Save the child depth
+      Curr->Depth = ChildDepth;
     } else {
       #ifdef VERBOSE_OUTPUT
       cout << "Translating: ";
@@ -259,8 +279,12 @@ Value* Translator::LiftNodesWBS(const SharedAbstractNode& TopNode, shared_ptr<IR
             Curr->Vars = this->Vars;
             Curr->Nodes = Nodes;
             Curr->IR = IR;
+            // Determine the child depth
+            size_t ChildDepth = Curr->Depth + 1;
             // Craft a new child node
             Curr = make_shared<AstNode>(ReferencedAst, Curr);
+            // Save the child depth
+            Curr->Depth = ChildDepth;
             // Save the expression reference when known
             Curr->Expression = ReferencedExpression;
             // Reset the exploration state
@@ -916,7 +940,7 @@ void Translator::CloneFunctionInto(Function* SrcFunc, Function* DstFunc) const {
   Public function to execute the Triton AST to LLVM-IR Module translation.
 */
 
-shared_ptr<Module> Translator::TritonAstToLLVMIR(const SharedAbstractNode& node, map<ExpKey, shared_ptr<llvm::Module>>& cache) {
+shared_ptr<Module> Translator::TritonAstToLLVMIR(const SharedAbstractNode& node, map<ExpKey, shared_ptr<llvm::Module>>& cache, ssize_t MaxDepth) {
   // Allocate a new Module (the old one is deallocated only if not referenced anymore)
   this->Module = make_shared<llvm::Module>("TritonAstModule", this->Context);
   if (Module == nullptr) {
@@ -938,7 +962,7 @@ shared_ptr<Module> Translator::TritonAstToLLVMIR(const SharedAbstractNode& node,
   // Initialize the IRBuilder to lift the nodes
   shared_ptr<IRBuilder<>> IR = make_shared<IRBuilder<>>(TritonAstBlock);
   // Traverse the AST in a WBS way (and lift the AST nodes)
-  auto* Value = this->LiftNodesWBS(node, IR, cache);
+  auto* Value = this->LiftNodesWBS(node, IR, cache, MaxDepth);
   // Add the return statement
   IR->CreateRet(Value);
 #ifdef DEBUG_OUTPUT
@@ -946,9 +970,10 @@ shared_ptr<Module> Translator::TritonAstToLLVMIR(const SharedAbstractNode& node,
   cout << "\nOriginal Triton AST: " << node << endl;
   // DEBUG: dump the Module
   cout << "\nLifted Triton AST" << endl;
-  // Dump the function
-  Module->dump();
 #endif
+  // Dumping the unoptimized function
+  cout << "\n> Unoptimized LLVM-IR Module\n" << endl;
+  this->Module->dump();
   // Optimize with LLVM
   this->OptimizeModule(this->Module.get());
   // DEBUG: dump the optimized Module
@@ -1004,11 +1029,9 @@ SharedAbstractNode Translator::LiftInstructionsDFS(Value* value, map<Value*, Sha
         #ifdef VERBOSE_OUTPUT
         outs() << "Found global variable loading:\n";
         GlobalVar->dump();
-        #endif
-        auto var = this->Api.getSymbolicVariable(GlobalVar->getName().str());
-        #ifdef VERBOSE_OUTPUT
-        outs() << "Triton symbolic variable:\n";
-        cout << var << endl;
+        // auto var = this->Api.getSymbolicVariable(GlobalVar->getName().str());
+        // outs() << "Triton symbolic variable:\n";
+        // cout << var << endl;
         #endif
         node = variables[GlobalVar->getName().str()];
         #ifdef VERBOSE_OUTPUT

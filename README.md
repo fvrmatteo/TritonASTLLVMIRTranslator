@@ -5,27 +5,49 @@ This code has been developed as a quick test in a weekend to evaluate how feasib
 # Sample output
 
 ```
-Original Triton AST
-(bvadd (bvsub SymVar_0 SymVar_1) (bvadd SymVar_0 SymVar_1))
+> Original Triton AST
 
-Optimized LLVM-IR Module
+(bvadd (bvsub (bvadd (bvnot (bvneg (bvmul SymVar_0 SymVar_1))) (bvnot (bvneg (bvmul SymVar_0 SymVar_1)))) (bvadd (bvnot (bvneg (bvmul SymVar_0 SymVar_1))) (bvnot (bvneg (bvmul SymVar_0 SymVar_1))))) (bvsub (bvadd (bvnot (bvneg (bvmul SymVar_0 SymVar_1))) (bvnot (bvneg (bvmul SymVar_0 SymVar_1)))) (bvadd (bvnot (bvneg (bvmul SymVar_0 SymVar_1))) (bvnot (bvneg (bvmul SymVar_0 SymVar_1))))))
+
+> Unoptimized LLVM-IR Module
+
 ; ModuleID = 'TritonAstModule'
 source_filename = "TritonAstModule"
 
-@SymVar_0 = common local_unnamed_addr global i64
+@FakeVar_64_0 = common global i64
 
 ; Function Attrs: alwaysinline
-define common i64 @TritonAstFunction() local_unnamed_addr #0 {
+define common i64 @TritonAstFunction() #0 {
 TritonAstEntry:
-  %0 = load i64, i64* @SymVar_0, align 4
-  %1 = shl i64 %0, 1
-  ret i64 %1
+  %0 = load i64, i64* @FakeVar_64_0
+  %1 = add i64 %0, %0
+  %2 = add i64 %0, %0
+  %3 = sub i64 %1, %2
+  %4 = add i64 %0, %0
+  %5 = add i64 %0, %0
+  %6 = sub i64 %4, %5
+  %7 = add i64 %3, %6
+  ret i64 %7
 }
 
 attributes #0 = { alwaysinline }
 
-Optimized Triton AST
-(bvshl SymVar_0 (_ bv1 64))
+> Optimized LLVM-IR Module
+
+; ModuleID = 'TritonAstModule'
+source_filename = "TritonAstModule"
+
+; Function Attrs: alwaysinline
+define common i64 @TritonAstFunction() local_unnamed_addr #0 {
+TritonAstEntry:
+  ret i64 0
+}
+
+attributes #0 = { alwaysinline }
+
+> Optimized Triton AST
+
+(_ bv0 64)
 ```
 
 # Inspiration
